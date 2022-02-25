@@ -69,19 +69,6 @@ def calculate_fitness(taget_image, adversarial_images, population, num, second_l
     return fitness
 
 
-def best_value(fitness, G, D, population):
-    min_fitness = fitness[0]
-    min_individual = population[0]
-    G_value = G[0]
-    D_value = D[0]
-    for i in range(population_size):
-        if fitness[i] < min_fitness:
-            min_fitness = fitness[i]
-            min_individual = population[i]
-            G_value = G[i]
-            D_value = D[i]
-    return min_individual, min_fitness, G_value, D_value
-
 def mutation(subpopulation, optimization_dim):
 
     Mpopulation=np.zeros((population_size, optimization_dim))
