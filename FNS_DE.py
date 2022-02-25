@@ -23,9 +23,6 @@ population_size = 50
 generations = 100
 F = 0.5
 CR = 0.6
-fitness = []
-G = []
-D = []
 xmin = -1
 xmax = 1
 eps = 0.1
@@ -47,9 +44,7 @@ def init_population(dim):
 def calculate_fitness(taget_image, sample_adv_images, population, second_label, first_labels, dim):
     second_label = second_label
     taget_image = taget_image.cpu().detach().numpy()
-    fitness.clear()
-    G.clear()
-    D.clear()
+    fitness = []
     function_value=np.zeros(population_size)
     attack_direction=np.zeros((population_size,3,32,32))
     for i in range(population_size):
@@ -69,26 +64,9 @@ def calculate_fitness(taget_image, sample_adv_images, population, second_label, 
        outputs.itemset(first_labels, c)
        g = np.max(outputs)
        function_value[b] = d-g
-       G.append(g)
-       D.append(d)
        fitness.append(function_value[b])
 
-    return fitness, G, D
-
-
-
-def best_value(fitness, G, D, population):
-    min_fitness = fitness[0]
-    min_indi = population[0]
-    G_value = G[0]
-    D_value = D[0]
-    for i in range(population_size):
-        if fitness[i] < min_fitness:
-            min_fitness = fitness[i]
-            min_indi = population[i]
-            G_value = G[i]
-            D_value = D[i]
-    return min_indi, min_fitness, G_value, D_value
+    return fitness
 
 def mutation(population, dim):
 
@@ -120,17 +98,16 @@ def crossover(Mpopulation, population, dim):
              Cpopulation[i, j] = population[i, j]
   return Cpopulation
 
-def selection(taget_image, sample_adv_images, Cpopulation, population,second_label, first_labels, dim):
-    Cf, w, e = calculate_fitness(taget_image, sample_adv_images,  Cpopulation,second_label, first_labels, dim)
-    Cf = np.array(Cf)
-    CF = copy.deepcopy(Cf)
-    f,r,t = calculate_fitness(taget_image, sample_adv_images,  population,second_label, first_labels,dim)
+def selection(taget_image, sample_adv_images, Cpopulation, population,second_label, first_labels, dim, pfitness):
+    Cfitness = calculate_fitness(taget_image, sample_adv_images,  Cpopulation,second_label, first_labels, dim)
     for i in range(population_size):
-        if CF[i] < f[i]:
+        if Cfitness[i] < pfitness[i]:
             population[i] = Cpopulation[i]
+            pfitness[i] = Cfitness[i]
         else:
             population[i] = population[i]
-    return population
+            pfitness[i] = pfitness[i] 
+    return population, pfitness
 
 def FDE(taget_image, adversarial_images, second_label, first_labels):
     num = np.size(adversarial_images, 0)
@@ -142,25 +119,23 @@ def FDE(taget_image, adversarial_images, second_label, first_labels):
         dim = num
         sample_adv_images = adversarial_images
 
-    optimum_solution = []
-    optimum_individual = []
     population = init_population(dim)
+    fitness = calculate_fitness(taget_image, sample_adv_images, population,second_label, first_labels, dim)
+    Best_indi_index = np.argmin(fitness)
+    Best_indi = population[Best_indi_index, :]
     for step in range(generations):
+        if min(fitness) < 0:
+           break
         Mpopulation = mutation(population, dim)
         Cpopulation = crossover(Mpopulation, population, dim)
-        population = selection(taget_image, sample_adv_images, Cpopulation, population, second_label, first_labels, dim)
-        fitness, G, D = calculate_fitness(taget_image, sample_adv_images, population,second_label, first_labels, dim)
-        best_id, best_fitness, BEST_G, BEST_D= best_value(fitness, G, D, population)
-        optimum_solution.append(best_fitness)
-        optimum_individual.append(best_id)
+        population, fitness = selection(taget_image, sample_adv_images, Cpopulation, population, second_label, first_labels, dim, fitness)
+        Best_indi_index = np.argmin(fitness)
+        Best_indi = population[Best_indi_index, :]
 
-    minfitness = min(optimum_solution)
-    minfitness_index = optimum_solution.index(minfitness)
-    minindividual = optimum_individual[minfitness_index]
     Finalattack_sign = np.zeros((1, 3, 32, 32))
     taget_image = taget_image.cpu().detach().numpy()
     for j in range(0, dim):
-       Finalattack_sign[0, :, :, :] = Finalattack_sign[0, :, :, :] + minindividual[j] * (sample_adv_images[j, :, :, :] - taget_image[0, :, :, :])
+       Finalattack_sign[0, :, :, :] = Finalattack_sign[0, :, :, :] + Best_indi[j] * (sample_adv_images[j, :, :, :] - taget_image[0, :, :, :])
     Final_direction = np.sign(Finalattack_sign)
     final_image = taget_image + eps * Final_direction
     final_image = torch.from_numpy(final_image)
