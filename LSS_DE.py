@@ -23,9 +23,6 @@ population_size = 50
 generations = 100
 F = 0.5
 CR = 0.6
-fitness = []
-G =[]
-D =[]
 xmin = -1
 xmax = 1
 eps = 0.1
@@ -47,9 +44,7 @@ def init_population(num):
 def calculate_fitness(taget_image, adversarial_images, population, num, second_label, first_labels):
     second_label = second_label
     taget_image = taget_image.cpu().detach().numpy()
-    fitness.clear()
-    G.clear()
-    D.clear()
+    fitness = []
     function_value = np.zeros(population_size)
     sign_images = np.zeros((population_size, 3, 32, 32))
 
@@ -69,11 +64,9 @@ def calculate_fitness(taget_image, adversarial_images, population, num, second_l
        outputs.itemset(first_labels, c)
        g = np.max(outputs)
        function_value[b] = d-g
-       G.append(g)
-       D.append(d)
        fitness.append(function_value[b])
 
-    return fitness, G, D
+    return fitness
 
 
 def best_value(fitness, G, D, population):
@@ -120,23 +113,24 @@ def crossover(Mpopulation, subpopulation, Spopulation, index, optimization_dim):
   Spopulation[0:population_size, index] = Cpopulation
   return Spopulation
 
-def selection(taget_image, adversarial_images, Spopulation, population,num, second_label, first_labels):
-    Cf, w, e = calculate_fitness(taget_image, adversarial_images, Spopulation, num, second_label, first_labels)
-    Cf = np.array(Cf)
-    CF = copy.deepcopy(Cf)
-    f, r, t = calculate_fitness(taget_image, adversarial_images, population, num, second_label, first_labels)
+def selection(taget_image, adversarial_images, Spopulation, population,num, second_label, first_labels, pfitness):
+    Cfitness = calculate_fitness(taget_image, adversarial_images, Spopulation, num, second_label, first_labels)
     for i in range(population_size):
-        if CF[i] < f[i]:
+        if Cfitness[i] < pfitness[i]:
             population[i] = Spopulation[i]
+            pfitness[i] = Cfitness[i]
         else:
             population[i] = population[i]
-    return population
+            pfitness[i] = pfitness[i]
+    return population, pfitness
 
 def LDE(taget_image, adversarial_images, second_label, first_labels):
-    optimum_solution = []
-    optimum_individual = []
+
     num = np.size(adversarial_images, 0)
     population = init_population(num)
+    fitness = calculate_fitness(taget_image, adversarial_images, population, num, second_label, first_labels)
+    Best_indi_index = np.argmin(fitness)
+    Best_indi = population[Best_indi_index, :]
     optimization_dim = 10
     if num <= optimization_dim:
         optimization_dim = num
@@ -145,20 +139,17 @@ def LDE(taget_image, adversarial_images, second_label, first_labels):
         index = random.sample(range(0, num), optimization_dim)
 
     for step in range(generations):
+        if min(fitness) < 0:
+            break
         Spopulation = copy.deepcopy(population)
         subpopulation = copy.deepcopy(population[0:population_size, index])
         Mpopulation = mutation(subpopulation, optimization_dim)
         Spopulation = crossover(Mpopulation, subpopulation, Spopulation, index, optimization_dim)
-        population = selection(taget_image, adversarial_images, Spopulation, population, num, second_label, first_labels)
-        fitness, G, D = calculate_fitness(taget_image, adversarial_images, population, num, second_label, first_labels)
-        best_individual, best_fitness, BEST_G, BEST_D = best_value(fitness, G, D, population)
-        optimum_solution.append(best_fitness)
-        optimum_individual.append(best_individual)
+        population, fitness = selection(taget_image, adversarial_images, Spopulation, population, num, second_label, first_labels, fitness)
+        Best_indi_index = np.argmin(fitness)
+        Best_indi = population[Best_indi_index, :]
         index = random.sample(range(0, num), optimization_dim)
 
-    minfitness = min(optimum_solution)
-    minfitness_index = optimum_solution.index(minfitness)
-    minindividual = optimum_individual[minfitness_index]
     attack_sign = np.zeros((1, 3, 32, 32))
     taget_image = taget_image.cpu().detach().numpy()
     for j in range(0, num):
